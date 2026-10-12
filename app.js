@@ -272,9 +272,10 @@ VIEWS.heute = () => {
     <div style="margin:16px 0">${strip}</div>
     ${main}
     <h2>Diese Woche</h2>
-    <div class="stats"><div class="stat"><b class="num">${weekSessions.length}</b><span>Trainings</span></div>
-      <div class="stat"><b class="num">${fmt(wSets)}</b><span>Sätze</span></div>
-      <div class="stat"><b class="num">${wVol >= 10000 ? fmt(wVol / 1000, 1) + ' t' : fmt(wVol)}</b><span>${wVol >= 10000 ? 'bewegt' : 'kg bewegt'}</span></div></div>
+    <div class="card row" style="gap:18px">${ring(new Set(weekSessions.map((s) => s.date)).size, wk && weekHasPlan(wk) ? wk.days.filter((d) => d.items.length).length || 3 : 3)}
+      <div class="grow stack"><div><div class="big num">${fmt(wSets)}</div><span class="sub small">Sätze erledigt</span></div>
+      <div><div class="big num" style="font-size:26px">${wVol >= 10000 ? fmt(wVol / 1000, 1) + ' t' : fmt(wVol) + ' kg'}</div><span class="sub small">insgesamt bewegt</span></div></div></div>
+    ${weekSessions.length ? `<h2>Muskelgruppen diese Woche</h2><div class="card">${hbars(groupSets(weekSessions), ' Sätze')}</div>` : ''}
     ${lastCard}${kcalCard}`;
 };
 
@@ -400,7 +401,10 @@ VIEWS.verlauf = () => {
     <div class="stats"><div class="stat"><b class="num">${S.sessions.length}</b><span>Trainings gesamt</span></div>
       <div class="stat"><b class="num">${fmt(S.sessions.reduce((a, s) => a + setCount(s.entries), 0))}</b><span>Sätze gesamt</span></div>
       <div class="stat"><b class="num">${fmt(S.sessions.reduce((a, s) => a + (s.end - s.start), 0) / 3.6e6, 1)} h</b><span>trainiert</span></div></div>
+    <h2>Trainingskalender</h2><div class="card">${heatmap()}</div>
     <h2>Trainings pro Woche</h2><div class="card">${barChart(weeks)}</div>
+    <h2>Bewegtes Gewicht pro Woche</h2><div class="card"><span class="sub small">in Tonnen</span>${barChart(weeks.map((w) => ({ label: w.label, v: Math.round(w.vol / 100) / 10 })))}</div>
+    <h2>Muskelgruppen (30 Tage)</h2><div class="card">${hbars(groupSets(S.sessions.filter((s) => s.date >= dkey(addDays(new Date(), -30)))), ' Sätze')}</div>
     <h2>Übung im Verlauf</h2>
     <select class="input" data-f="progEx">${exIds.map((id) => `<option value="${id}" ${id === ui.progEx ? 'selected' : ''}>${esc(ex(id).name)} (${used[id]}×)</option>`).join('')}</select>
     <div class="card" style="margin-top:10px">
@@ -472,6 +476,7 @@ function lineChart(pts) {
   const area = `${x(0)},${H - B} ${line} ${x(pts.length - 1)},${H - B}`;
   const showDots = pts.length <= 24;
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">
+    <defs><linearGradient id="fadeW" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
     <line class="gl" x1="0" x2="${W}" y1="${H - B}" y2="${H - B}"/>
     <polygon class="ar" points="${area}"/><polyline class="ln" points="${line}"/>
     ${showDots ? pts.map((p, i) => `<circle class="pt" cx="${x(i)}" cy="${y(p.v)}" r="3.5"/>`).join('') : ''}
@@ -484,11 +489,61 @@ function barChart(items) {
   const bw = (W - gap * (items.length - 1)) / items.length;
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${items.map((it, i) => {
     const h = it.v ? Math.max(4, (H - B - 14) * it.v / max) : 3;
+    const top = it.v === max && it.v;
     const x = i * (bw + gap);
-    return `<rect class="br ${it.v ? '' : 'z'}" x="${x}" y="${H - B - h}" width="${bw}" height="${h}" rx="4"/>
-      ${it.v ? `<text x="${x + bw / 2}" y="${H - B - h - 4}" text-anchor="middle" style="fill:var(--text);font-weight:600">${it.v}</text>` : ''}
+    return `<rect class="br ${it.v ? '' : 'z'} ${top ? 'top' : ''}" style="animation-delay:${i * 40}ms" x="${x}" y="${H - B - h}" width="${bw}" height="${h}" rx="4"/>
+      ${it.v ? `<text x="${x + bw / 2}" y="${H - B - h - 4}" text-anchor="middle" style="fill:var(--text);font-weight:600">${fmt(it.v, 1)}</text>` : ''}
       ${i % 3 === items.length % 3 - 1 || i === items.length - 1 ? `<text x="${x + bw / 2}" y="${H - 4}" text-anchor="middle">${it.label}</text>` : ''}`;
   }).join('')}</svg>`;
+}
+
+function effort(type, sets) {
+  let v = 0;
+  for (const st of sets) v += type === 'w' ? num(st.w) * num(st.r) : type === 'c' ? (num(st.km) || num(st.r)) : num(st.r);
+  return v;
+}
+function effortUnit(type, sets) { return { w: 'kg', bw: 'Wdh.', t: 's', c: sets.some((st) => num(st.km)) ? 'km' : 'min' }[type]; }
+
+function groupSets(sessions) {
+  const m = {};
+  for (const s of sessions) for (const e of s.entries) { const g = ex(e.exId).group; m[g] = (m[g] || 0) + e.sets.length; }
+  return GROUPS.concat([{ id: 'custom', name: 'Eigene' }]).filter((g) => m[g.id]).map((g) => ({ label: g.name, v: m[g.id] })).sort((a, b) => b.v - a.v);
+}
+function hbars(items, unit = '') {
+  if (!items.length) return '<p class="sub small" style="margin:0">Noch keine Daten.</p>';
+  const max = Math.max(...items.map((i) => i.v));
+  return '<div class="hbars">' + items.map((it, i) => `<div class="hb"><span class="hb-l">${esc(it.label)}</span>
+    <span class="hb-t"><span class="hb-f" style="width:${Math.max(4, 100 * it.v / max)}%;animation-delay:${i * 60}ms"></span></span>
+    <b class="num">${fmt(it.v, 1)}${unit}</b></div>`).join('') + '</div>';
+}
+function ring(done, goal) {
+  const r = 42, c = 2 * Math.PI * r, pct = Math.min(1, goal ? done / goal : 0);
+  return `<svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="${r}" class="rg-bg"/>
+    <circle cx="50" cy="50" r="${r}" class="rg-fg" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct)}"/>
+    <text x="50" y="49" text-anchor="middle" class="rg-big">${done}/${goal}</text><text x="50" y="66" text-anchor="middle" class="rg-sm">Trainings</text></svg>`;
+}
+function heatmap(weeks = 17) {
+  const perDay = {};
+  for (const s of S.sessions) perDay[s.date] = (perDay[s.date] || 0) + setCount(s.entries);
+  const start = addDays(mondayOf(new Date()), -7 * (weeks - 1));
+  const today = dkey(new Date());
+  const cs = 15, gap = 4, L = 18;
+  let cells = '', months = '', lastM = -1;
+  for (let w = 0; w < weeks; w++) {
+    const wd = addDays(start, 7 * w);
+    if (wd.getMonth() !== lastM) { lastM = wd.getMonth(); if (w < weeks - 1) months += `<text x="${L + w * (cs + gap)}" y="9" class="hm-t">${MONTHS[lastM]}</text>`; }
+    for (let d = 0; d < 7; d++) {
+      const k = dkey(addDays(start, 7 * w + d));
+      if (k > today) continue;
+      const n = perDay[k] || 0;
+      const lvl = n === 0 ? 0 : n < 10 ? 1 : n < 18 ? 2 : n < 26 ? 3 : 4;
+      cells += `<rect x="${L + w * (cs + gap)}" y="${14 + d * (cs + gap)}" width="${cs}" height="${cs}" rx="4" class="hm l${lvl}"><title>${k}: ${n} Sätze</title></rect>`;
+    }
+  }
+  const W = L + weeks * (cs + gap), H = 14 + 7 * (cs + gap);
+  const lbl = ['Mo', '', 'Mi', '', 'Fr', '', 'So'].map((t, d) => t ? `<text x="0" y="${14 + d * (cs + gap) + 11}" class="hm-t">${t}</text>` : '').join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}">${months}${lbl}${cells}</svg>
+    <div class="hm-leg"><span>weniger</span>${[0, 1, 2, 3, 4].map((l) => `<i class="l${l}"></i>`).join('')}<span>mehr</span></div>`;
 }
 
 /* ---------- Training ---------- */
@@ -509,6 +564,17 @@ function placeholderFor(exId, i) {
   const last = lastOf(exId);
   if (!last) return {};
   return last.sets[Math.min(i, last.sets.length - 1)];
+}
+
+function compareHTML(x, e, last) {
+  const done = e.sets.filter((st) => st.done);
+  if (!done.length || !last) return '';
+  const now = effort(x.type, done), prev = effort(x.type, last.sets);
+  const max = Math.max(now, prev, 1), unit = effortUnit(x.type, last.sets.concat(done));
+  const pct = prev ? Math.round((now / prev - 1) * 100) : 0;
+  return `<div class="cmp"><div class="cmp-r"><span>Heute</span><span class="hb-t"><span class="hb-f now" style="width:${100 * now / max}%"></span></span><b class="num">${fmt(now, 1)} ${unit}</b></div>
+    <div class="cmp-r"><span>Letztes Mal</span><span class="hb-t"><span class="hb-f prev" style="width:${100 * prev / max}%"></span></span><b class="num">${fmt(prev, 1)} ${unit}</b></div>
+    ${now >= prev ? `<div class="cmp-badge up">▲ ${now > prev ? '+' + pct + ' % – stärker als letztes Mal!' : 'Gleichstand – noch ein Satz?'}</div>` : `<div class="cmp-badge">noch ${fmt(prev - now, 1)} ${unit} bis zum letzten Mal</div>`}</div>`;
 }
 
 function renderWorkout() {
@@ -534,13 +600,17 @@ function renderWorkout() {
         <button class="icon-btn" data-a="eMenu" data-e="${ei}" aria-label="Optionen">⋯</button></div>
       <div class="hint">${e.target ? 'Ziel: ' + e.sets.length + ' × ' + esc(e.target) + ' · ' : ''}${last ? 'Letztes Mal (' + shortDate(parseD(last.session.date)) + '): ' + esc(setsText(x.type, last.sets)) : 'Erstes Mal – viel Erfolg!'}</div>
       <div class="sets ${one ? 'one' : ''}">${rows}</div>
+      ${compareHTML(x, e, last)}
       <button class="btn sm" style="margin-top:10px" data-a="addSet" data-e="${ei}">+ Satz</button></div>`;
   }).join('');
 
   box.innerHTML = `<div class="wo-head"><div class="in">
       <button class="icon-btn" data-a="closeWorkout" aria-label="Minimieren" style="font-size:22px">⌄</button>
       <div class="grow"><div class="sub small">${esc(A.title || 'Training')}</div><div class="timer num" id="elapsed">${clock(Date.now() - A.start)}</div></div>
-      <button class="btn primary sm" data-a="finish">Fertig</button></div></div>
+      <button class="btn primary sm" data-a="finish">Fertig</button></div>
+      ${(() => { const all = A.entries.reduce((a, e) => a + e.sets.length, 0), dn = A.entries.reduce((a, e) => a + e.sets.filter((st) => st.done).length, 0);
+        const vol = volume(A.entries.map((e) => ({ exId: e.exId, sets: e.sets.filter((st) => st.done) })));
+        return all ? `<div class="in wo-prog"><span class="hb-t"><span class="hb-f" style="width:${100 * dn / all}%"></span></span><span class="num small">${dn}/${all} Sätze${vol ? ' · ' + fmt(vol) + ' kg' : ''}</span></div>` : ''; })()}</div>
     <div class="wo-body">
       ${entries || '<div class="empty">Noch keine Übung. Füg unten welche hinzu.</div>'}
       <button class="btn block" style="margin-top:12px" data-a="pickForWorkout">+ Übung hinzufügen</button>
@@ -597,6 +667,7 @@ function finishWorkout() {
       <div class="stat"><b class="num">${setCount(entries)}</b><span>Sätze</span></div>
       <div class="stat"><b class="num">${fmt(session.kcal)}</b><span>kcal (ca.)</span></div></div>
       ${vol ? `<p class="sub" style="text-align:center">${fmt(vol)} kg insgesamt bewegt</p>` : ''}
+      <h2>Was du trainiert hast</h2>${hbars(groupSets([session]), ' Sätze')}
       ${prs.length ? `<h2>Neue Bestleistungen</h2>${prs.map((n) => `<div class="kv"><span>${esc(n)}</span><span class="pr">REKORD</span></div>`).join('')}` : ''}
     </div><div class="sh-foot"><button class="btn primary block" data-a="closeSheet">Schließen</button></div>`);
 }
