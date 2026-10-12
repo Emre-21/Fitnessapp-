@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fitness</title>
+  <meta name="description" content="Persönlicher Trainingsplaner mit Übungssammlung, Wochenplan und Fortschritt.">
+  <meta name="theme-color" content="#f4f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1110" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Fitness">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main id="view"></main>
+  <div id="workout" hidden></div>
+  <div id="pill" hidden></div>
+  <nav id="nav">
+    <button data-a="go" data-v="heute"><svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg><span>Heute</span></button>
+    <button data-a="go" data-v="plan"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Plan</span></button>
+    <button data-a="go" data-v="uebungen"><svg viewBox="0 0 24 24"><path d="M2.5 12h2M19.5 12h2M7.5 12h9"/><rect x="4.5" y="7.5" width="3" height="9" rx="1"/><rect x="16.5" y="7.5" width="3" height="9" rx="1"/></svg><span>Übungen</span></button>
+    <button data-a="go" data-v="verlauf"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 15l4-4 3 3 5-6"/></svg><span>Fortschritt</span></button>
+    <button data-a="go" data-v="profil"><svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg><span>Profil</span></button>
+  </nav>
+  <div id="sheet" hidden><div class="scrim" data-a="closeSheet"></div><div class="panel" role="dialog" aria-modal="true"></div></div>
+  <div id="toast" hidden></div>
+  <script src="exercises.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
